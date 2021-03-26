@@ -1,10 +1,8 @@
 /**
  * Philip A Senger - 2019-08-23
  */
-require('dotenv').config();
 const AWS = require('aws-sdk');
-const fs = require('fs');
-const fsPromises = require("fs").promises;
+const { open, writeFile, readdir, readFile } = require("fs").promises;
 const path = require('path');
 const Promise = require('bluebird');
 const moment = require('moment-timezone');
@@ -19,103 +17,107 @@ const {
     promiseWhile
 } = require('./utils');
 
-const credentials = new AWS.SharedIniFileCredentials({profile: process.env.AWS_PROFILE});
-AWS.config.credentials = credentials;
-const cloudwatchlogs = new AWS.CloudWatchLogs({region: 'ap-southeast-2'});
+const {
+    region,
+    profile,
+    logGroupName,
+    startDate,
+    timeZone,
+    hours,
+    queryString,
+} = require('./config');
 
-const logGroupName = process.env.CLOUDWATCH_LOG_GROUP;
-const startDate = process.env.START_DATE;
-const timeZone = process.env.TIMEZONE || 'UTC';
-const hours = JSON.parse(process.env.HOURS_RANGE);
+AWS.config.setPromisesDependency(Promise);
+const credentials = new AWS.SharedIniFileCredentials({profile});
+AWS.config.credentials = credentials;
+const cloudwatchlogs = new AWS.CloudWatchLogs({region});
 
 const dir = buildLogGroupDir(logGroupName);
 
-hours.forEach((hour) => {
-    console.log(`Run for Hour: #${hour}`);
+const options = {encoding: 'utf-8', flag: 'r'};
 
-    const queryString = `
-FIELDS @timestamp, @message
-| sort @timestamp desc
-`;
+(async () => {
+    for await (let hour of hours) {
+        console.log(`Run for Hour: #${hour}`);
 
-    /**
-     * The end of the time range to query. The range is inclusive, so the specified
-     * end time is included in the query. Specified as epoch time, the number of
-     * seconds since January 1, 1970, 00:00:00 UTC.
-     */
-    const startTime = moment.tz(`${startDate} ${("00" + hour).slice(-2)}:00`, timeZone);
-    let endTime = startTime.clone();
-    endTime.hour(hour + 1);
+        /**
+         * The end of the time range to query. The range is inclusive, so the specified
+         * end time is included in the query. Specified as epoch time, the number of
+         * seconds since January 1, 1970, 00:00:00 UTC.
+         */
+        const startTime = moment.tz(`${startDate} ${("00" + hour).slice(-2)}:00`, timeZone);
+        let endTime = startTime.clone();
+        endTime.hour(hour + 1);
 
-    if (endTime.valueOf() <= startTime.valueOf()) {
-        console.error(`Time range end is before time range start endTime:${endTime.valueOf()} startTime:${startTime.valueOf()}`);
-        process.exit(1)
-    }
+        if (endTime.valueOf() <= startTime.valueOf()) {
+            console.error(`Time range end is before time range start endTime:${endTime.valueOf()} startTime:${startTime.valueOf()}`);
+            process.exit(1)
+        }
 
-    const startTimeStamp = stamp(startTime);
-    const endTimeStamp = stamp(endTime);
-    console.log(`  Start time: ${startTime.toISOString()} (UTC) / ${startTime.format()} (${timeZone})`);
-    console.log(`    End time: ${endTime.toISOString()} (UTC) / ${endTime.format()} (${timeZone})`);
+        const startTimeStamp = stamp(startTime);
+        const endTimeStamp = stamp(endTime);
+        console.log(`  Start time: ${startTime.toISOString()} (UTC) / ${startTime.format()} (${timeZone})`);
+        console.log(`    End time: ${endTime.toISOString()} (UTC) / ${endTime.format()} (${timeZone})`);
 
-    const fileName = buildRangedFileName(startTimeStamp, endTimeStamp);
-    const filePath = path.join(dir, 'logs.txt');
-    const limit = '' + 10000;
-    /**
+        const fileName = buildRangedFileName(startTimeStamp, endTimeStamp);
+        const filePath = path.join(dir, 'logs.txt');
+        const limit = '' + 10000;
 
-     endTime
-     The end of the time range to query. The range is inclusive, so the specified end time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
-     Type: Long
-     Valid Range: Minimum value of 0.
-     Required: Yes
+        /**
 
-     limit
-     The maximum number of log events to return in the query. If the query string uses the fields command, only the specified fields and their values are returned. The default is 1000.
-     Type: Integer
-     Valid Range: Minimum value of 1. Maximum value of 10000.
-     Required: No
+         endTime
+         The end of the time range to query. The range is inclusive, so the specified end time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
+         Type: Long
+         Valid Range: Minimum value of 0.
+         Required: Yes
 
-     logGroupName
-     The log group on which to perform the query.
-     A StartQuery operation must include a logGroupNames or a logGroupName parameter, but not both.
-     Type: String
-     Length Constraints: Minimum length of 1. Maximum length of 512.
-     Pattern: [\.\-_/#A-Za-z0-9]+
-     Required: No
+         limit
+         The maximum number of log events to return in the query. If the query string uses the fields command, only the specified fields and their values are returned. The default is 1000.
+         Type: Integer
+         Valid Range: Minimum value of 1. Maximum value of 10000.
+         Required: No
 
-     logGroupNames
-     The list of log groups to be queried. You can include up to 20 log groups.
-     A StartQuery operation must include a logGroupNames or a logGroupName parameter, but not both.
-     Type: Array of strings
-     Length Constraints: Minimum length of 1. Maximum length of 512.
-     Pattern: [\.\-_/#A-Za-z0-9]+
-     Required: No
+         logGroupName
+         The log group on which to perform the query.
+         A StartQuery operation must include a logGroupNames or a logGroupName parameter, but not both.
+         Type: String
+         Length Constraints: Minimum length of 1. Maximum length of 512.
+         Pattern: [\.\-_/#A-Za-z0-9]+
+         Required: No
 
-     queryString
-     The query string to use. For more information, see CloudWatch Logs Insights Query Syntax.
-     Type: String
-     Length Constraints: Minimum length of 0. Maximum length of 2048.
-     Required: Yes
+         logGroupNames
+         The list of log groups to be queried. You can include up to 20 log groups.
+         A StartQuery operation must include a logGroupNames or a logGroupName parameter, but not both.
+         Type: Array of strings
+         Length Constraints: Minimum length of 1. Maximum length of 512.
+         Pattern: [\.\-_/#A-Za-z0-9]+
+         Required: No
 
-     startTime
-     The beginning of the time range to query. The range is inclusive, so the specified start time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
-     Type: Long
-     Valid Range: Minimum value of 0.
-     Required: Yes
-     */
-    const params = {
-        endTime: endTime.valueOf().toString(),
-        startTime: startTime.valueOf().toString(),
-        queryString,
-        limit,
-        logGroupName,
-    };
-    // console.log('params=', JSON.stringify(params, null, 4));
-    cloudwatchlogs.startQuery(params, function (err, q) {
+         queryString
+         The query string to use. For more information, see CloudWatch Logs Insights Query Syntax.
+         Type: String
+         Length Constraints: Minimum length of 0. Maximum length of 2048.
+         Required: Yes
 
-        if (err) {
-            console.log(err, err.stack); // an error occurred
-        } else {
-            let {queryId} = q;
+         startTime
+         The beginning of the time range to query. The range is inclusive, so the specified start time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
+         Type: Long
+         Valid Range: Minimum value of 0.
+         Required: Yes
+         */
+
+        const params = {
+            endTime: endTime.valueOf().toString(),
+            startTime: startTime.valueOf().toString(),
+            queryString,
+            limit,
+            logGroupName,
+        };
+
+        let fileHandle = {};
+
+        try {
+            const {queryId} = await cloudwatchlogs.startQuery(params).promise();
 
             const work = {
                 params: {queryId},
@@ -131,75 +133,69 @@ FIELDS @timestamp, @message
                 return (work.continue)
             };
 
-            const action = (work) => () => {
-                return Promise
-                    .delay(work.pause)
-                    .then(() => cloudwatchlogs.getQueryResults(work.params).promise())
-                    .then(({results, statistics, status} = {}) => {
-                        console.log('statistics=', JSON.stringify(statistics, null, 4));
-                        console.log('work count=', work.count++);
-                        console.log('# of records=', results.length);
-                        if (status === 'Running') {
-                            return;
-                        }
-                        const filePathName = path.join(dir, fileName);
-                        console.log('Cloud Watch JSON file', filePathName);
-                        fs.writeFileSync(filePathName, JSON.stringify(results, null, 4));
-                        work.continue = false;
-                    })
+            const action = work => async () => {
+                await Promise.delay(work.pause)
+                let {results, statistics, status} = await cloudwatchlogs.getQueryResults(work.params).promise();
+                console.log('statistics=', JSON.stringify(statistics, null, 4));
+                console.log('work count=', work.count++);
+                console.log('# of records=', results.length);
+                if (status === 'Running') {
+                    return;
+                }
+                const filePathName = path.join(dir, fileName);
+                console.log('Cloud Watch JSON file', filePathName);
+                await writeFile(filePathName, JSON.stringify(results, null, 4))
+                work.continue = false;
             };
 
-            promiseWhile(condition(work), action(work))
-                .then(() => {
-                    console.log('done calling AWS');
-                    return fsPromises.readdir(dir);
-                })
-                .then(fileNames => [].concat(...fileNames)) // flatten
-                .then(fileNames => fileNames.filter(fileName => ~fileName.search(/^[^\.].*\.json$/))) // filter
-                .then(fileNames => fileNames.map(file => path.join(dir, file))) // attach directory
-                .then(fileNames => {
-                    const options = {encoding: 'utf-8', flag: 'r'};
-                    return Promise.map(fileNames, fileName => fsPromises.readFile(fileName, options))
-                })
-                .then((data) => {
-                    return Promise.map(data, (file) => JSON.parse(file));
-                })
-                .then((rawData) => {
-                    return rawData.reduce(
-                        (accum, items, index) => {
-                            console.log(`d${index} has ${items.length} records`)
-                            return accum.concat(items);
-                        },
-                        []
-                    )
-                        .reduce(
-                            (accum, [timestamp, message, ptr]) => {
-                                accum.push({
-                                    timestamp: extractTime(timestamp),
-                                    message: extractMessage(message)
-                                })
-                                return accum;
-                            },
-                            []
-                        )
-                        .sort(compareTimeStamps)
-                        .reduce(
-                            (accum, {message, timestamp}) => {
-                                return `${accum}\n${message}`;
-                            },
-                            ''
-                        );
-                })
-                .then((data) => {
-                    return Promise.props({data, fileHandle: fsPromises.open(filePath, 'w')})
-                })
-                .then(({data, fileHandle}) => {
-                    return fileHandle.write(Buffer.from(data, 'utf-8'));
-                })
-                .catch((e) => {
-                    console.error(e);
-                })
-        }
-    });
+            await promiseWhile(condition(work), action(work));
 
-})
+            console.log('done calling AWS');
+
+            let fileNames = await readdir(dir);
+
+            fileNames = [].concat(...fileNames); // flatten
+
+            fileNames = fileNames.filter(fileName => ~fileName.search(/^[^\.].*\.json$/)); // filter
+
+            fileNames = fileNames.map(file => path.join(dir, file)) // attach directory
+
+            let data = await Promise.map(fileNames, fileName => readFile(fileName, options));
+
+            data = await Promise.map(data, (file) => JSON.parse(file));
+
+            data = data.reduce(
+                    (accum, items, index) => {
+                        console.log(`d${index} has ${items.length} records`)
+                        return accum.concat(items);
+                    },
+                    []
+                )
+                .reduce(
+                    (accum, [timestamp, message, ptr]) => {
+                        accum.push({
+                            timestamp: extractTime(timestamp),
+                            message: extractMessage(message)
+                        })
+                        return accum;
+                    },
+                    []
+                )
+                .sort(compareTimeStamps)
+                .reduce(
+                    (accum, {message, timestamp}) => {
+                        return `${accum}\n${message}`;
+                    },
+                    ''
+                );
+
+            fileHandle = await open(filePath, 'w');
+
+            await writeFile(filePath, data);
+
+        } catch (err) {
+            console.log(err, err.stack); // an error occurred
+        }
+
+    }
+})()
