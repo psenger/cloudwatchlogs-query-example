@@ -1,10 +1,11 @@
 {
   "name": "cloudwatchlogs-query-example",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A very simple example of cloudwatchlogs query",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node -r dotenv/config index.js",
+    "prestart": "npm install"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
   "dependencies": {
     "aws-sdk": "^2.516.0",
     "bluebird": "^3.5.5",
+    "dotenv": "^8.2.0",
     "moment-timezone": "^0.5.26"
   }
 }
