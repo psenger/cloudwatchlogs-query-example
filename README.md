@@ -2,30 +2,18 @@
 
 A very simple example of cloud watch logs query from NodeJS as a client.
 
-__Note:__
+## Variables
 
-* I used moment.js because it is easy to manipulate the dates.
-* the queryString is just looking at the timestamp, you will need to modify it.
-* and ```params``` has a limit of 1000, which might mean you lose some of the matching records if the results exceeds 1000.
+You can use a `.env` for or environment variables.
 
-```javascript 1.6
-const fileName = 'outfile.json';
-const logGroupName = 'fill this in';
-const queryString = `
-fields @timestamp 
-| sort @timestamp desc
-`;
-const endTime = moment().tz('Australia/Sydney');
-const startTime = endTime.clone();
-startTime.subtract(10, 'days');
-
-const params = {
-    endTime: endTime.valueOf(),
-    queryString,
-    startTime: startTime.valueOf(),
-    limit: '1000',
-    logGroupName,
-};
-```
+| Parameter              	| Type                        	| Purpose                                                                                                                                 	|
+|------------------------	|-----------------------------	|-----------------------------------------------------------------------------------------------------------------------------------------	|
+| `AWS_REGION`              | STRING (OPTIONAL)             | The AWS Region Defaults to ap-southeast-2                                                                                                 |
+| `AWS_PROFILE`          	| STRING                      	| The AWS Named Profile to use see (AWS Named Profile)[https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html]      	|
+| `TIMEZONE`             	| TIME ZONE DB NAME           	| A full list of all DB Names can be found (List of tz database time zones)[https://en.wikipedia.org/wiki/List_of_tz_database_time_zones] 	|
+| `START_DATE`           	| ISO 8601 DATE               	| YYYY-MM-DD format start date                                                                                                            	|
+| `HOURS_RANGE`          	| VALID JSON ARRAY OF NUMBERS 	| A valid JSON array of consecutive numbers of which represent the 24 hour period to scan. Eg `[20,21]` would be 9pm and 10pm               |
+| `CLOUDWATCH_LOG_GROUP` 	| STRING                      	| The AWS Cloud Watch Log Group Name                                                                                                      	|
+| `QUERY_STRING`            | STRING (OPTIONAL)             | The query string to send Cloud watch, the default is `FIELDS @timestamp, @message | sort @timestamp desc`                                 |
 
 fini
