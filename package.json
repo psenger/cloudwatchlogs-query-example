@@ -7,6 +7,10 @@
     "start": "node -r dotenv/config index.js",
     "prestart": "npm install"
   },
+  "engines": {
+    "node": ">=15",
+    "npm": "~7"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/psenger/cloudwatchlogs-query-example.git"
