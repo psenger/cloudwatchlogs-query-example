@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node -r dotenv/config index.js",
-    "prestart": "npm install"
+    "prestart": "npm install",
+    "clean": "rimraf ./logs/*"
   },
   "engines": {
     "node": ">=15",
@@ -32,6 +33,7 @@
     "aws-sdk": "^2.516.0",
     "bluebird": "^3.5.5",
     "dotenv": "^8.2.0",
-    "moment-timezone": "^0.5.26"
+    "moment-timezone": "^0.5.26",
+    "rimraf": "^3.0.2"
   }
 }
