@@ -30,7 +30,7 @@
     "example"
   ],
   "dependencies": {
-    "aws-sdk": "^2.516.0",
+    "aws-sdk": "^2.814.0",
     "bluebird": "^3.5.5",
     "dotenv": "^8.2.0",
     "moment-timezone": "^0.5.26",
